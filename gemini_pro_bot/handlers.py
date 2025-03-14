@@ -61,6 +61,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     Sends the user's message to the chat session to generate a response.
     Streams the response back to the user, handling any errors.
     """
+    # Check if the message is from a group chat and if the bot is mentioned or replied to
+    if update.message.chat.type in ['group', 'supergroup']:
+        if not (f'@{context.bot.username}' in update.message.text or 
+                (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)):
+            return
+
     if context.chat_data.get("chat") is None:
         new_chat(context)
     text = update.message.text
@@ -133,8 +139,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await asyncio.sleep(0.1)
 
 
-async def handle_image(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming images with captions and generate a response."""
+    # Check if the image is from a group chat and if the bot is mentioned or replied to
+    if update.message.chat.type in ['group', 'supergroup']:
+        if not (f'@{context.bot.username}' in update.message.caption or 
+                (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)):
+            return
+
     init_msg = await update.message.reply_text(
         text="Generating...", reply_to_message_id=update.message.message_id
     )
