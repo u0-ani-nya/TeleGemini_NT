@@ -1,32 +1,97 @@
+import os
 import asyncio
+from dotenv import load_dotenv, set_key
 from gemini_pro_bot.llm import model, img_model
 from google.generativeai.types.generation_types import (
     StopCandidateException,
     BlockedPromptException,
 )
-from telegram import Update
-from telegram.ext import (
-    ContextTypes,
-)
+from telegram import Update, User
+from telegram.ext import ContextTypes
 from telegram.error import NetworkError, BadRequest
 from telegram.constants import ChatAction, ParseMode
 from gemini_pro_bot.html_format import format_message
 import PIL.Image as load_image
 from io import BytesIO
 
+# Load environment variables from .env file
+load_dotenv()
+
+def get_admins() -> list:
+    """Get the list of admin user IDs from the ADMINS environment variable."""
+    admins = os.getenv("ADMINS", "")
+    return [int(admin_id) for admin_id in admins.split(",") if admin_id.strip().isdigit()]
+
+def save_admins(admins: list) -> None:
+    """Save the list of admin user IDs to the ADMINS environment variable in the .env file."""
+    admins_str = ",".join(map(str, admins))
+    set_key(".env", "ADMINS", admins_str)
+    # Reload the .env file to reflect changes
+    load_dotenv(override=True)
+
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /admin command to add or remove admin users."""
+    user_id = update.effective_user.id
+    admins = get_admins()
+    bot_owner_id = admins[0] if admins else None
+
+    if not context.args or len(context.args) < 1:
+        await update.effective_message.reply_text("Usage: /admin <add|del|check>")
+        return
+
+    action = context.args[0]
+
+    if action == "check":
+        await update.effective_message.reply_text(f"Current Admins: {admins}\nYour User ID: {user_id}")
+        return
+
+    if user_id != bot_owner_id:
+        await update.effective_message.reply_text("You do not have permission to manage admins.")
+        return
+
+    if action == "add":
+        if not update.message.reply_to_message:
+            await update.effective_message.reply_text("Please reply to the user's message to add them as an admin.")
+            return
+
+        target_user: User = update.message.reply_to_message.from_user
+        target_user_id = target_user.id
+
+        if target_user_id in admins:
+            await update.effective_message.reply_text(f"User {target_user.mention_html()} is already an admin.", parse_mode=ParseMode.HTML)
+        else:
+            admins.append(target_user_id)
+            save_admins(admins)
+            await update.effective_message.reply_text(f"User {target_user.mention_html()} has been added as an admin.", parse_mode=ParseMode.HTML)
+
+    elif action == "del":
+        if not update.message.reply_to_message:
+            await update.effective_message.reply_text("Please reply to the user's message to remove them from admins.")
+            return
+
+        target_user: User = update.message.reply_to_message.from_user
+        target_user_id = target_user.id
+
+        if target_user_id == bot_owner_id:
+            await update.effective_message.reply_text("You cannot remove the bot owner from admins.")
+        elif target_user_id not in admins:
+            await update.effective_message.reply_text(f"User {target_user.mention_html()} is not an admin.", parse_mode=ParseMode.HTML)
+        else:
+            admins.remove(target_user_id)
+            save_admins(admins)
+            await update.effective_message.reply_text(f"User {target_user.mention_html()} has been removed from admins.", parse_mode=ParseMode.HTML)
+    else:
+        await update.effective_message.reply_text("Invalid action. Use 'add', 'del', or 'check'.")
 
 def new_chat(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.chat_data["chat"] = model.start_chat()
 
-
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
-    await update.message.reply_html(
+    await update.effective_message.reply_html(
         f"Hi {user.mention_html()}!\n\nStart sending messages with me to generate a response.\n\nSend /new to start a new chat session.",
-        # reply_markup=ForceReply(selective=True),
     )
-
 
 async def help_command(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -40,18 +105,12 @@ Chat commands:
 
 Send a message to the bot to generate a response.
 """
-    await update.message.reply_text(help_text)
-
+    await update.effective_message.reply_text(help_text)
 
 async def newchat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Start a new chat session."""
-    init_msg = await update.message.reply_text(
-        text="Starting new chat session...",
-        reply_to_message_id=update.message.message_id,
-    )
+    await update.effective_message.reply_text("New chat session started.")
     new_chat(context)
-    await init_msg.edit_text("New chat session started.")
-
 
 # Define the function that will handle incoming messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -70,7 +129,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if context.chat_data.get("chat") is None:
         new_chat(context)
     text = update.message.text
-    init_msg = await update.message.reply_text(
+    init_msg = await update.effective_message.reply_text(
         text="Generating...", reply_to_message_id=update.message.message_id
     )
     await update.message.chat.send_action(ChatAction.TYPING)
@@ -138,7 +197,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Sleep for a bit to prevent the bot from getting rate-limited
         await asyncio.sleep(0.1)
 
-
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming images with captions and generate a response."""
     # Check if the image is from a group chat and if the bot is mentioned or replied to
@@ -147,7 +205,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)):
             return
 
-    init_msg = await update.message.reply_text(
+    init_msg = await update.effective_message.reply_text(
         text="Generating...", reply_to_message_id=update.message.message_id
     )
     images = update.message.photo
