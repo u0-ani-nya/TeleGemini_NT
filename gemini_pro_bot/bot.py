@@ -1,32 +1,38 @@
 import os
-from dotenv import load_dotenv
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from gemini_pro_bot.filters import AuthFilter, MessageFilter, PhotoFilter
+from dotenv import load_dotenv
 from gemini_pro_bot.handlers import (
     start,
     help_command,
     newchat_command,
     handle_message,
     handle_image,
-    admin_command,  # Import the new command handler
+    admin_command, # Import the new command handler
+    instruction_command,
 )
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Create the Application and pass it your bot's token.
-application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
-# on different commands - answer in Telegram
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("help", help_command))
-application.add_handler(CommandHandler("new", newchat_command))
-application.add_handler(CommandHandler("admin", admin_command))  # Add the new command handler
+def start_bot() -> None:
+    """Start the bot."""
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
-# Any text message is sent to LLM to generate a response
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # on different commands - answer in Telegram
+    application.add_handler(CommandHandler("start", start, filters=AuthFilter))
+    application.add_handler(CommandHandler("help", help_command, filters=AuthFilter))
+    application.add_handler(CommandHandler("new", newchat_command, filters=AuthFilter))
+    application.add_handler(CommandHandler("admin", admin_command)) # Add the new command handler
+    application.add_handler(CommandHandler("instruction", instruction_command, filters=AuthFilter)) 
 
-# Any image is sent to LLM to generate a response
-application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    # Any text message is sent to LLM to generate a response
+    application.add_handler(MessageHandler(MessageFilter, handle_message))
 
-# Run the bot until the user presses Ctrl-C
-application.run_polling()
+    # Any image is sent to LLM to generate a response
+    application.add_handler(MessageHandler(PhotoFilter, handle_image))
+
+    # Run the bot until the user presses Ctrl-C
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
