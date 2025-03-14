@@ -13,6 +13,7 @@ from gemini_pro_bot.handlers import (
     newchat_command,
     handle_message,
     handle_image,
+    admin_command,  # Import the new command handler
 )
 
 load_dotenv()
@@ -27,6 +28,8 @@ def start_bot() -> None:
     application.add_handler(CommandHandler("start", start, filters=AuthFilter))
     application.add_handler(CommandHandler("help", help_command, filters=AuthFilter))
     application.add_handler(CommandHandler("new", newchat_command, filters=AuthFilter))
+    application.add_handler(CommandHandler("admin", admin_command))  # Add the new command handler
+
 
     # Any text message is sent to LLM to generate a response
     application.add_handler(MessageHandler(MessageFilter, handle_message))
