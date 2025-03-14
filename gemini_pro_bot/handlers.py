@@ -8,6 +8,7 @@ from telegram.constants import ChatAction, ParseMode
 from gemini_pro_bot.html_format import format_message
 from PIL import Image as load_image
 from io import BytesIO
+from telegram.error import BadRequest
 
 # Load environment variables from .env file
 load_dotenv()
@@ -132,7 +133,6 @@ async def help_command(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 /admin <add|del|check> - 设置/取消/检查管理员(仅bot所有者可用, admin的第0号).
 
 发条消息 开始对话吧.
-Github: https://github.com/u0-ani-nya/TeleGemini_NT
 """
     await update.effective_message.reply_text(help_text)
 
@@ -158,28 +158,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if context.chat_data.get("chat") is None:
         new_chat(context)
     text = update.message.text
-    init_msg = await update.effective_message.reply_text(
-        text="Generating...", reply_to_message_id=update.message.message_id
-    )
+    try:
+        init_msg = await update.effective_message.reply_text(
+            text="Generating...", reply_to_message_id=update.message.message_id
+        )
+    except BadRequest as e:
+        print(e)
+        init_msg = await update.effective_message.reply_text("Generating...")
+
     await update.message.chat.send_action(ChatAction.TYPING)
 
     # Generate a response using the text-generation pipeline
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.0-flash-exp',
             config=genai.types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
             contents=[text]
         )
         full_plain_message = response.text  # Use response.text for the message content
         await asyncio.sleep(0.1)  # Ensure the event loop is not blocked
-        await init_msg.edit_text(
-            text=full_plain_message,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
+        try:
+            await init_msg.edit_text(
+                text=full_plain_message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        except BadRequest:
+            await update.effective_message.reply_text(
+                text=full_plain_message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
     except Exception as e:
         print(e)
-        await init_msg.edit_text("An unexpected error occurred.")
+        try:
+            await init_msg.edit_text("An unexpected error occurred.")
+        except BadRequest:
+            await update.effective_message.reply_text("An unexpected error occurred.")
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming images with captions and generate a response."""
@@ -190,9 +205,14 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)):
             return
 
-    init_msg = await update.effective_message.reply_text(
-        text="Generating...", reply_to_message_id=update.message.message_id
-    )
+    try:
+        init_msg = await update.effective_message.reply_text(
+            text="Generating...", reply_to_message_id=update.message.message_id
+        )
+    except BadRequest as e:
+        print(e)
+        init_msg = await update.effective_message.reply_text("Generating...")
+
     images = update.message.photo
     unique_images: dict = {}
     for img in images:
@@ -207,17 +227,27 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     prompt = update.message.caption if update.message.caption else "Analyse this image and generate response"
     try:
         response = await client.aio.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.0-flash-exp',
             config=genai.types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
             contents=[prompt, a_img]
         )
         full_plain_message = response.text  # Use response.text for the message content
         await asyncio.sleep(0.1)  # Ensure the event loop is not blocked
-        await init_msg.edit_text(
-            text=full_plain_message,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
+        try:
+            await init_msg.edit_text(
+                text=full_plain_message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        except BadRequest:
+            await update.effective_message.reply_text(
+                text=full_plain_message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
     except Exception as e:
         print(e)
-        await init_msg.edit_text("An unexpected error occurred.")
+        try:
+            await init_msg.edit_text("An unexpected error occurred.")
+        except BadRequest:
+            await update.effective_message.reply_text("An unexpected error occurred.")
