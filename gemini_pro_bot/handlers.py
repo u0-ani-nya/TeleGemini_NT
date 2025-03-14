@@ -1,21 +1,22 @@
 import os
 import asyncio
 from dotenv import load_dotenv, set_key
-from gemini_pro_bot.llm import model, img_model
-from google.generativeai.types.generation_types import (
-    StopCandidateException,
-    BlockedPromptException,
-)
+from google import genai
 from telegram import Update, User
-from telegram.ext import ContextTypes
-from telegram.error import NetworkError, BadRequest
+from telegram.ext import ContextTypes, CommandHandler
 from telegram.constants import ChatAction, ParseMode
 from gemini_pro_bot.html_format import format_message
-import PIL.Image as load_image
+from PIL import Image as load_image
 from io import BytesIO
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize the GenAI Client
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# Load the system instruction from the environment variable
+SYSTEM_INSTRUCTION = os.getenv("INSTRUCTION", "")
 
 def get_admins() -> list:
     """Get the list of admin user IDs from the ADMINS environment variable."""
@@ -27,6 +28,14 @@ def save_admins(admins: list) -> None:
     admins_str = ",".join(map(str, admins))
     set_key(".env", "ADMINS", admins_str)
     # Reload the .env file to reflect changes
+    load_dotenv(override=True)
+
+def save_instruction(instruction: str) -> None:
+    """Save the system instruction to the INSTRUCTION environment variable in the .env file."""
+    set_key(".env", "INSTRUCTION", instruction)
+    # Reload the .env file to reflect changes
+    global SYSTEM_INSTRUCTION
+    SYSTEM_INSTRUCTION = instruction
     load_dotenv(override=True)
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -83,8 +92,25 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         await update.effective_message.reply_text("Invalid action. Use 'add', 'del', or 'check'.")
 
+async def instruction_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /instruction command to update the system instruction."""
+    user_id = update.effective_user.id
+    admins = get_admins()
+
+    if user_id not in admins:
+        await update.effective_message.reply_text("You do not have permission to update the system instruction.")
+        return
+
+    if not context.args:
+        await update.effective_message.reply_text("Usage: /instruction <new_instruction>")
+        return
+
+    new_instruction = " ".join(context.args)
+    save_instruction(new_instruction)
+    await update.effective_message.reply_text(f"System instruction updated to: {new_instruction}")
+
 def new_chat(context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.chat_data["chat"] = model.start_chat()
+    context.chat_data["chat"] = []
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -96,14 +122,17 @@ async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     help_text = """
-Basic commands:
-/start - Start the bot
-/help - Get help. Shows this message
+普通指令:
+/start - 启动bot.
+/help - 显示本帮助.
+/new - 忘记聊天记录, 开始新对话.
 
-Chat commands:
-/new - Start a new chat session (model will forget previously generated messages)
+管理员特权指令:
+/instruction <new_instruction> - 更新提示词 (只有管理员可用).
+/admin <add|del|check> - 设置/取消/检查管理员(仅bot所有者可用, admin的第0号).
 
-Send a message to the bot to generate a response.
+发条消息 开始对话吧.
+Github: https://github.com/u0-ani-nya/TeleGemini_NT
 """
     await update.effective_message.reply_text(help_text)
 
@@ -133,75 +162,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         text="Generating...", reply_to_message_id=update.message.message_id
     )
     await update.message.chat.send_action(ChatAction.TYPING)
+
     # Generate a response using the text-generation pipeline
-    chat = context.chat_data.get("chat")  # Get the chat session for this chat
-    response = None
     try:
-        response = await chat.send_message_async(
-            text, stream=True
-        )  # Generate a response
-    except StopCandidateException as sce:
-        print("Prompt: ", text, " was stopped. User: ", update.message.from_user)
-        print(sce)
-        await init_msg.edit_text("The model unexpectedly stopped generating.")
-        chat.rewind()  # Rewind the chat session to prevent the bot from getting stuck
-        return
-    except BlockedPromptException as bpe:
-        print("Prompt: ", text, " was blocked. User: ", update.message.from_user)
-        print(bpe)
-        await init_msg.edit_text("Blocked due to safety concerns.")
-        if response:
-            # Resolve the response to prevent the chat session from getting stuck
-            await response.resolve()
-        return
-    full_plain_message = ""
-    # Stream the responses
-    async for chunk in response:
-        try:
-            if chunk.text:
-                full_plain_message += chunk.text
-                message = format_message(full_plain_message)
-                init_msg = await init_msg.edit_text(
-                    text=message,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
-                )
-        except StopCandidateException as sce:
-            await init_msg.edit_text("The model unexpectedly stopped generating.")
-            chat.rewind()  # Rewind the chat session to prevent the bot from getting stuck
-            continue
-        except BadRequest:
-            await response.resolve()  # Resolve the response to prevent the chat session from getting stuck
-            continue
-        except NetworkError:
-            raise NetworkError(
-                "Looks like you're network is down. Please try again later."
-            )
-        except IndexError:
-            await init_msg.reply_text(
-                "Some index error occurred. This response is not supported."
-            )
-            await response.resolve()
-            continue
-        except Exception as e:
-            print(e)
-            if chunk.text:
-                full_plain_message = chunk.text
-                message = format_message(full_plain_message)
-                init_msg = await update.message.reply_text(
-                    text=message,
-                    parse_mode=ParseMode.HTML,
-                    reply_to_message_id=init_msg.message_id,
-                    disable_web_page_preview=True,
-                )
-        # Sleep for a bit to prevent the bot from getting rate-limited
-        await asyncio.sleep(0.1)
+        response = await client.aio.models.generate_content(
+            model='gemini-2.0-flash',
+            config=genai.types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
+            contents=[text]
+        )
+        full_plain_message = response.text  # Use response.text for the message content
+        await asyncio.sleep(0.1)  # Ensure the event loop is not blocked
+        await init_msg.edit_text(
+            text=full_plain_message,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        print(e)
+        await init_msg.edit_text("An unexpected error occurred.")
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming images with captions and generate a response."""
     # Check if the image is from a group chat and if the bot is mentioned or replied to
     if update.message.chat.type in ['group', 'supergroup']:
-        if not (f'@{context.bot.username}' in update.message.caption or 
+        caption = update.message.caption if update.message.caption else ""
+        if not (f'@{context.bot.username}' in caption or 
                 (update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id)):
             return
 
@@ -219,47 +204,20 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     file_list = list(unique_images.values())
     file = await file_list[0].get_file()
     a_img = load_image.open(BytesIO(await file.download_as_bytearray()))
-    prompt = None
-    if update.message.caption:
-        prompt = update.message.caption
-    else:
-        prompt = "Analyse this image and generate response"
-    response = await img_model.generate_content_async([prompt, a_img], stream=True)
-    full_plain_message = ""
-    async for chunk in response:
-        try:
-            if chunk.text:
-                full_plain_message += chunk.text
-                message = format_message(full_plain_message)
-                init_msg = await init_msg.edit_text(
-                    text=message,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
-                )
-        except StopCandidateException:
-            await init_msg.edit_text("The model unexpectedly stopped generating.")
-        except BadRequest:
-            await response.resolve()
-            continue
-        except NetworkError:
-            raise NetworkError(
-                "Looks like you're network is down. Please try again later."
-            )
-        except IndexError:
-            await init_msg.reply_text(
-                "Some index error occurred. This response is not supported."
-            )
-            await response.resolve()
-            continue
-        except Exception as e:
-            print(e)
-            if chunk.text:
-                full_plain_message = chunk.text
-                message = format_message(full_plain_message)
-                init_msg = await update.message.reply_text(
-                    text=message,
-                    parse_mode=ParseMode.HTML,
-                    reply_to_message_id=init_msg.message_id,
-                    disable_web_page_preview=True,
-                )
-        await asyncio.sleep(0.1)
+    prompt = update.message.caption if update.message.caption else "Analyse this image and generate response"
+    try:
+        response = await client.aio.models.generate_content(
+            model='gemini-2.0-flash',
+            config=genai.types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION),
+            contents=[prompt, a_img]
+        )
+        full_plain_message = response.text  # Use response.text for the message content
+        await asyncio.sleep(0.1)  # Ensure the event loop is not blocked
+        await init_msg.edit_text(
+            text=full_plain_message,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        print(e)
+        await init_msg.edit_text("An unexpected error occurred.")
