@@ -67,13 +67,9 @@
 
 ### Star History
 
-<a href="https://www.star-history.com/#u0-ani-nya/TeleGemini_NT&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date" />
-  </picture>
-</a>
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date)](https://www.star-history.com/#u0-ani-nya/TeleGemini_NT&Date)
 
 ### Contributing
 
