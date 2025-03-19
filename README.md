@@ -1,13 +1,12 @@
 <div align="center">
 
-  # GEMINI-PRO-BOT
+  # TeleGemini NT
   
-  **A Python Telegram bot powered by Google's `gemini-pro` LLM API**
+  **A Python Telegram bot powered by Google's `gemini` LLM API**
 
-  *This is a Python Telegram bot that uses Google's gemini-pro LLM API to generate creative text formats based on user input. It is designed to be a fun and interactive way to explore the possibilities of large language models.*
-  
-[Gemini Bot Preview](https://github.com/rabilrbl/gemini-pro-bot/assets/63334479/ffddcdfa-09c2-4f02-b14d-4407e888b605)
+  *This is a Python Telegram bot that uses Google's gemini LLM API to generate creative text formats based on user input. It is designed to be a fun and interactive way to explore the possibilities of large language models.*
 
+*This is the upgrade of original "gemini-pro" and support more feature.*
 </div>
 
 ### Features
@@ -18,6 +17,8 @@
 * Easy to use with simple commands:
     * `/start`: Greet the bot and get started.
     * `/help`: Get information about the bot's capabilities.
+    * `/admin`: Add/Delete/Check bot admin command.
+    * `/instruction`: Set/Restore system instruction.
 * Send any text message to trigger the generation process.
 * Send any image with captions to generate responses based on the image. (Multi-modal support)
 * User authentication to prevent unauthorized access by setting `AUTHORIZED_USERS` in the `.env` file (optional).
@@ -26,33 +27,9 @@
 
 * Python 3.10+
 * Telegram Bot API token
-* Google `gemini-pro` API key
+* Google `gemini` API key
 * dotenv (for environment variables)
 
-
-### Docker
-
-#### GitHub Container Registry
-Simply run the following command to run the pre-built image from GitHub Container Registry:
-
-```shell
-docker run --env-file .env ghcr.io/rabilrbl/gemini-pro-bot:latest
-```
-
-Update the image with:
-```shell
-docker pull ghcr.io/rabilrbl/gemini-pro-bot:latest
-```
-
-#### Build
-Build the image with:
-```shell
-docker build -t gemini-pro-bot .
-```
-Once the image is built, you can run it with:
-```shell
-docker run --env-file .env gemini-pro-bot
-```
 
 ### Installation
 
@@ -64,6 +41,9 @@ docker run --env-file .env gemini-pro-bot
     * `BOT_TOKEN`: Your Telegram Bot API token. You can get one by talking to [@BotFather](https://t.me/BotFather).
     * `GOOGLE_API_KEY`: Your Google Bard API key. You can get one from [Google AI Studio](https://makersuite.google.com/).
     * `AUTHORIZED_USERS`: A comma-separated list of Telegram usernames or user IDs that are authorized to access the bot. (optional) Example value: `shonan23,1234567890`
+    * `ADMINS`: Set who control the bot. The first one is owner and only he/she can add/delete other admin Example value: `ADMINS='1262948436,xxxxxx,xxxxx` make sure that is your telegram ID
+    * INSTRUCTION : Set what you want your bot remind.
+    * INSTRUCTION_ORIGINAL : Set the default instruction in order to prevent some admin change to another instruction and you lost the one you need.
 4. Run the bot:
     * `python main.py` (if not using pipenv)
     * `pipenv run python main.py` (if using pipenv)
@@ -83,21 +63,15 @@ docker run --env-file .env gemini-pro-bot
     AUTHORIZED_USERS=shonan23,1234567890
     ```
 
-### Bot Commands
 
-| Command | Description |
-| ------- | ----------- |
-| `/start` | Greet the bot and get started. |
-| `/help` | Get information about the bot's capabilities. |
-| `/new` | Start a new chat session. |
 
 ### Star History
 
-<a href="https://star-history.com/#rabilrbl/gemini-pro-bot&Date">
+<a href="https://www.star-history.com/#u0-ani-nya/TeleGemini_NT&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=rabilrbl/gemini-pro-bot&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=rabilrbl/gemini-pro-bot&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=rabilrbl/gemini-pro-bot&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=u0-ani-nya/TeleGemini_NT&type=Date" />
   </picture>
 </a>
 
